@@ -1,0 +1,45 @@
+pki-dir: ./tmp-pki
+signing-key: stoneglen-key.pem
+
+defaults:
+  exppiry: 8760h
+
+host-template:
+  cn: hostname
+  key:
+    algo: rsa
+    size: 2048
+  names:
+  
+profiles:
+  root:
+    usages:
+      - "signing"
+      - "digital signagure"
+      - "key encipherment"
+      - "cert sign"
+      - "crl sign"
+    ca-constraints:
+      is-ca: true
+      max-path-len: 0
+      max-path-len-zero: true
+
+  intermediate:
+    usages:
+      - "signing"
+      - "digital signagure"
+      - "key encipherment"
+      - "cert sign"
+      - "crl sign"
+    ca-constraints:
+      is-ca: true
+      max-path-len: 0
+      max-path-len-zero: true
+
+  host:
+    usages:
+      - "signing"
+      - "digital signature"
+      - "key encipherment"
+      - "server auth"
+      - "client auth"
