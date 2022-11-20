@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 from cryptography import x509
-from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 import click
 import datetime
@@ -40,6 +40,27 @@ def cli(ctx, config):
 def debug():
     print("debug")
 
+
+@cli.command()
+# signing cert (extract DN)
+# signing key
+# cert template
+@click.argument('hostnames', nargs=-1, required=True)
+@click.pass_context
+def hostkeycert(ctx, hostnames):
+    sign_key = load_key(CA_KEY_PEM)
+    sign_cert = load_cert(CA_CRT_PEM)
+    private_key = create_key()
+    cert = new_certificate(
+        private_key.public_key(),
+        sign_key,
+        sign_cert,
+        hostnames
+    )
+    write_key(private_key, KEY_PEM)
+    write_cert(cert, CRT_PEM)
+
+
 @cli.command()
 @click.pass_context
 def config(ctx):
@@ -51,24 +72,14 @@ def config(ctx):
 
 @cli.command()
 def newkey():
-    key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
-    with open(KEY_PEM, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        ))
+    key = create_key()
+    write_key(key, KEY_PEM)
+
 
 @cli.command()
 def readkey():
-    with open(KEY_PEM, "rb") as f:
-        key = serialization.load_pem_private_key(
-            f.read(),
-            password=None,
-        )
+    load_key(KEY_PEM)
+
 
 @cli.command()
 def csr():
@@ -101,20 +112,70 @@ def signcsr():
         f.write(cert.public_bytes(serialization.Encoding.PEM))
 
 
-def load_cert(pem_file):
-    with open(pem_file, "rb") as f:
+def load_cert(filename):
+    with open(filename, "rb") as f:
         return x509.load_pem_x509_certificate(f.read())
 
-def load_key(pem_file):
-    with open(pem_file, "rb") as f:
+def write_cert(cert, filename):
+    with open(filename, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+def load_key(filename):
+    with open(filename, "rb") as f:
         return serialization.load_pem_private_key(
             f.read(),
             password=None,
         )
 
-def load_csr(pem_file):
-    with open(pem_file, "rb") as f:
+def write_key(key, filename):
+    with open(filename, "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+
+def load_csr(filename):
+    with open(filename, "rb") as f:
         return x509.load_pem_x509_csr(f.read())
+
+def create_key():
+    return rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+
+
+def new_certificate(pub_key, sign_key, sign_cert, hostnames):
+    one_day = datetime.timedelta(1, 0, 0)
+    builder = x509.CertificateBuilder()
+    builder = builder.subject_name(x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, u"US"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Colorado"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, "Colorado Springs"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Elfwerks"),
+        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, u"Stoneglen"),
+        x509.NameAttribute(NameOID.COMMON_NAME, hostnames[0])
+    ]))
+    builder = builder.issuer_name(sign_cert.subject)
+    builder = builder.not_valid_before(datetime.datetime.today() - one_day)
+    #
+    # TODO: parameterize lifetime of certificate
+    #
+    builder = builder.not_valid_after(datetime.datetime.today() + (one_day * 30))
+    builder = builder.serial_number(x509.random_serial_number())
+    builder = builder.public_key(pub_key)
+    san = []
+    for hn in hostnames:
+        san.append(x509.DNSName(hn))
+    builder = builder.add_extension(
+        x509.SubjectAlternativeName(san), critical=False)
+    builder = builder.add_extension(
+        x509.BasicConstraints(ca=False, path_length=None), critical=True)
+    return builder.sign(
+        private_key=sign_key, algorithm=hashes.SHA256(),
+    )
+
 
 def make_csr_builder():
     return x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
@@ -123,7 +184,7 @@ def make_csr_builder():
         x509.NameAttribute(NameOID.LOCALITY_NAME, "Colorado Springs"),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Elfwerks"),
         x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, u"Stoneglen"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "Stoneglen TEST Intermediate CA"),
+        x509.NameAttribute(NameOID.COMMON_NAME, u"Stoneglen TEST Intermediate CA"),
     ]))
 
 
