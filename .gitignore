@@ -2,7 +2,9 @@
 #
 /.venv
 /tmp
-
+*.sqlite
+/.vscode
+/pypki.yml
 
 ##  Python .gitignore below included from GitHub  ##########
 

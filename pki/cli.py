@@ -7,6 +7,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID
 from cryptography.x509.oid import NameOID
 
+from .db import PKIDB
+
 import click
 import datetime
 import sys
@@ -20,26 +22,59 @@ CRT_PEM = "./tmp/cert.pem"
 
 DEFAULT_CONFIG = {
     "pki-dir": "pki",
-    "sign-key": "ca-key.pem",
+    "db-file": "./pki.sqlite",
+    "host-ttl": "2y", # 2 years for host certs
+    "default-signer": "intermediate-cert1",
 }
 
+# Notes:
+#
+# - cli commands (to start with)
+#   - load cert     cert -> DB
+#   - load pair     (cert, key) -> DB
+#   - write key:    DB -> file
+#   - write cert:   DB -> file
+#   - write bundle: DB -> file
+#   - write root:   DB -> file
+#   - list roots
+#   - list intermediates
+#   - list hosts
+#   - new cert(DN: hostname, SANs) -> (cert, key)
+#
+#
 
 @click.group()
 @click.option('-c', '--config',
               default="pypki.yml",
               type=click.Path(file_okay=True, readable=True, allow_dash=False))
+@click.option('-v', '--verbose', count=True)
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config, verbose):
     ctx.ensure_object(dict)
+    ctx.obj['verbose'] = verbose
     if config != None:
         with open(config) as f:
             ctx.obj['config_file'] = config
             ctx.obj['config'] = yaml.load(f, Loader=yaml.FullLoader)
-    pass
+
+
 
 @cli.command()
-def debug():
-    print("debug")
+@click.pass_context
+def about(ctx):
+    if ctx.obj['verbose'] > 0:
+        print("verbose: enabled")
+    if 'config_file' in ctx.obj:
+        print("config file: {}".format(ctx.obj['config_file']))
+    print("about")
+
+
+@cli.command()
+@click.pass_context
+def init_db(ctx):
+    config = ctx.obj.get('config', DEFAULT_CONFIG)
+    pkidb = PKIDB('sqlite', config["db-file"])
+    pkidb.create_tables()
 
 
 @cli.command()
@@ -205,16 +240,7 @@ def make_csr_builder():
     ]))
 
 
-def load_config():
-    config = {
-        "pki-dir": "./pki",
-        "sign-key": "ca-key.pem",
-    }
-    return config
-
-
 def main():
-    config = load_config()
     cli()
 
 

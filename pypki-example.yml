@@ -1,5 +1,6 @@
 pki-dir: ./tmp-pki
 signing-key: stoneglen-key.pem
+db-file: ./pki.sqlite
 
 defaults:
   exppiry: 8760h
